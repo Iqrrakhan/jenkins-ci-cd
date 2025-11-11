@@ -92,7 +92,7 @@ app.delete("/listings/:id", async (req, res) => {
 //   res.send('testing successful')
 // })
 
-app.listen(3000, "0.0.0.0", () => {
+app.listen(4000, "0.0.0.0", () => {
   console.log("Server is listening on port 3000");
 });
 
