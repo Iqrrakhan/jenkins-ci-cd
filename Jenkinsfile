@@ -2,51 +2,63 @@ pipeline {
     agent any
 
     environment {
-        APP_CONTAINER   = "nodeapp"
-        MONGO_CONTAINER = "mongodb"
-        HOST_PORT       = "4000"
-    }
-
-    triggers {
-        // This allows the pipeline to be triggered automatically by GitHub webhook
-        pollSCM('* * * * *')  // optional, real webhook recommended
+        APP_NAME = "nodeapp"
+        MONGO_NAME = "mongodb"
+        APP_PORT = "4000"
+        DOCKER_COMPOSE_FILE = "docker-compose.yml"
     }
 
     stages {
-        stage('Clone Repository') {
+        stage('Checkout') {
             steps {
-                // Make sure your branch is 'main'
-                git branch: 'main', url: 'https://github.com/your-username/Airbnb-clone-ci.git'
+                // Pull code from GitHub
+                git branch: 'main', url: 'https://github.com/HuzefaAbid/Airbnb-clone-ci.git', credentialsId: 'github-pat'
             }
         }
 
         stage('Stop Existing Containers') {
             steps {
-                echo "Stopping any running containers..."
-                sh 'docker-compose down || true'
+                script {
+                    // Stop and remove running containers if they exist
+                    sh """
+                        docker-compose -f $DOCKER_COMPOSE_FILE down || true
+                        docker rm -f $APP_NAME || true
+                        docker rm -f $MONGO_NAME || true
+                    """
+                }
             }
         }
 
         stage('Build & Start Containers') {
             steps {
-                echo "Starting containers using docker-compose..."
-                sh 'docker-compose up -d'
+                script {
+                    // Start containers using docker-compose
+                    sh """
+                        docker-compose -f $DOCKER_COMPOSE_FILE up -d
+                    """
+                }
             }
         }
 
         stage('Verify Deployment') {
             steps {
-                echo "Checking if containers are running..."
-                sh "docker ps | grep ${APP_CONTAINER}"
-                sh "docker ps | grep ${MONGO_CONTAINER}"
-                echo "App should now be available at http://<EC2-Public-IP>:${HOST_PORT}"
+                script {
+                    // Check if the app is running
+                    sh """
+                        sleep 10
+                        curl -f http://localhost:$APP_PORT || exit 1
+                    """
+                }
             }
         }
     }
 
     post {
-        always {
-            echo "Pipeline finished."
+        success {
+            echo 'Deployment Successful!'
+        }
+        failure {
+            echo 'Deployment Failed!'
         }
     }
 }
