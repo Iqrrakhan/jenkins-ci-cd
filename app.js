@@ -13,7 +13,7 @@ app.use(methodOverride("_method"));
 app.engine("ejs", ejsMate);
 app.use(express.static(path.join(__dirname, "/public")));
 
-const MONGO_URL = "mongodb://127.0.0.1:27017/hustleBust";
+const MONGO_URL = process.env.MONGO_URL || "mongodb://mongodb:27017/hustleBust";
 async function main() {
   await mongoose.connect(MONGO_URL);
 }
@@ -92,6 +92,7 @@ app.delete("/listings/:id", async (req, res) => {
 //   res.send('testing successful')
 // })
 
-app.listen(3000, () => {
-  console.log("Server is listening to port 3000");
+app.listen(3000, "0.0.0.0", () => {
+  console.log("Server is listening on port 3000");
 });
+
