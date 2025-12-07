@@ -1,4 +1,3 @@
-
 pipeline {
     agent any
 
@@ -8,6 +7,7 @@ pipeline {
         APP_PORT = "4000"
         DOCKER_COMPOSE_FILE = "docker-compose.yml"
         DOCKER_TEST_IMAGE = "markhobson/maven-chrome:jdk-11"
+        RECIPIENT_EMAIL = "huzaifaabid41@gmail.com"
     }
 
     stages {
@@ -87,11 +87,11 @@ pipeline {
                     
                     dir('selenium-tests') {
                         sh """
-                            # Get the Docker bridge IP for host.docker.internal equivalent
+                            # Get the Docker bridge IP
                             DOCKER_HOST_IP=\$(ip -4 addr show docker0 | grep -Po 'inet \\K[\\d.]+')
                             echo "Docker host IP: \$DOCKER_HOST_IP"
                             
-                            # Run tests in Docker container
+                            # Run tests
                             docker run --rm \
                                 --network host \
                                 -v \$(pwd):/tests \
@@ -102,6 +102,12 @@ pipeline {
                         """
                     }
                 }
+            }
+        }
+
+        stage('Publish Test Results') {
+            steps {
+                junit '**/selenium-tests/target/surefire-reports/*.xml'
             }
         }
 
@@ -124,12 +130,106 @@ pipeline {
         always {
             script {
                 echo '=========================================='
-                echo 'Post-Build Actions'
+                echo 'Processing Test Results for Email'
                 echo '=========================================='
+                
+                // Parse test results from XML files
+                def raw = sh(
+                    script: "grep -h \"<testcase\" selenium-tests/target/surefire-reports/*.xml || echo ''",
+                    returnStdout: true
+                ).trim()
+
+                int total = 0
+                int passed = 0
+                int failed = 0
+                int skipped = 0
+                def details = ""
+
+                if (raw) {
+                    raw.split('\n').each { line ->
+                        total++
+
+                        def nameMatcher = (line =~ /name=\"([^\"]+)\"/)
+                        def name = nameMatcher ? nameMatcher[0][1] : "Unknown Test"
+
+                        if (line.contains("<failure")) {
+                            failed++
+                            details += "❌ ${name} — FAILED\n"
+                        } else if (line.contains("<skipped") || line.contains("</skipped>")) {
+                            skipped++
+                            details += "⏭️  ${name} — SKIPPED\n"
+                        } else {
+                            passed++
+                            details += "✅ ${name} — PASSED\n"
+                        }
+                    }
+                }
+
+                def buildStatus = currentBuild.currentResult
+                def statusEmoji = buildStatus == 'SUCCESS' ? '✅' : '❌'
+
+                def emailBody = """
+${statusEmoji} Jenkins Build ${buildStatus} - Build #${env.BUILD_NUMBER}
+==========================================================================
+
+PROJECT: ${env.JOB_NAME}
+BUILD NUMBER: ${env.BUILD_NUMBER}
+BUILD STATUS: ${buildStatus}
+BUILD DURATION: ${currentBuild.durationString.replace(' and counting', '')}
+BUILD URL: ${env.BUILD_URL}
+
+==========================================================================
+SELENIUM TEST SUMMARY
+==========================================================================
+
+Total Tests:   ${total}
+Passed:        ${passed} ✅
+Failed:        ${failed} ❌
+Skipped:       ${skipped} ⏭️
+
+Pass Rate:     ${total > 0 ? String.format("%.1f", (passed * 100.0 / total)) : '0'}%
+
+==========================================================================
+DETAILED TEST RESULTS
+==========================================================================
+
+${details ?: 'No test details available'}
+
+==========================================================================
+PIPELINE STAGES
+==========================================================================
+
+✅ Checkout Code from GitHub
+✅ Stop Existing Containers
+✅ Build & Start Application
+✅ Wait for Application
+${failed == 0 ? '✅' : '❌'} Run Selenium Tests
+✅ Verify Deployment
+
+==========================================================================
+VIEW FULL REPORT
+==========================================================================
+
+Test Report: ${env.BUILD_URL}testReport/
+Console Output: ${env.BUILD_URL}console
+Artifacts: ${env.BUILD_URL}artifact/
+
+==========================================================================
+
+This is an automated email from Jenkins CI/CD Pipeline.
+Generated at: ${new Date()}
+
+"""
+
+                emailext(
+                    to: "${RECIPIENT_EMAIL}",
+                    subject: "${statusEmoji} Build #${env.BUILD_NUMBER}: ${env.JOB_NAME} - ${buildStatus}",
+                    body: emailBody,
+                    attachmentsPattern: '**/selenium-tests/target/surefire-reports/*.xml'
+                )
+                
+                echo "Email sent to: ${RECIPIENT_EMAIL}"
             }
-            
-            // Publish test results
-            junit allowEmptyResults: true, testResults: '**/selenium-tests/target/surefire-reports/*.xml'
             
             // Archive test reports
             archiveArtifacts artifacts: '**/selenium-tests/target/surefire-reports/**/*', allowEmptyArchive: true
@@ -137,18 +237,19 @@ pipeline {
         
         success {
             echo '=========================================='
-            echo '✓ PIPELINE SUCCESSFUL!'
+            echo '✅ PIPELINE SUCCESSFUL!'
             echo 'Application deployed and all tests passed'
+            echo 'Email notification sent successfully'
             echo '=========================================='
         }
         
         failure {
             echo '=========================================='
-            echo '✗ PIPELINE FAILED!'
+            echo '❌ PIPELINE FAILED!'
             echo 'Check logs for details'
+            echo 'Email notification sent with failure details'
             echo '=========================================='
             
-            // Show container logs on failure
             sh """
                 echo "Application Logs:"
                 docker logs $APP_NAME || true
