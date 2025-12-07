@@ -92,3 +92,10 @@ Thumbs.db
 # Temporary files
 tmp/
 temp/
+
+# Selenium test artifacts
+selenium-tests/target/
+selenium-tests/.classpath
+selenium-tests/.project
+selenium-tests/.settings/
+*.class
