@@ -144,9 +144,9 @@ public class AirbnbListingTests {
         System.out.println("\n[TEST 6/12] Testing View Listing Details...");
         driver.get(BASE_URL + "/listings");
         
-        wait.until(ExpectedConditions.presenceOfElementLocated(By.className("card")));
-        WebElement firstCard = driver.findElement(By.className("card"));
-        firstCard.findElement(By.className("listing-link")).click();
+        wait.until(ExpectedConditions.presenceOfElementLocated(By.className("listing-link")));
+        WebElement firstLink = driver.findElement(By.className("listing-link"));
+        firstLink.click();
         
         wait.until(ExpectedConditions.presenceOfElementLocated(By.className("show-img")));
         WebElement image = driver.findElement(By.className("show-img"));
@@ -162,7 +162,7 @@ public class AirbnbListingTests {
         System.out.println("\n[TEST 7/12] Testing Edit Listing...");
         driver.get(BASE_URL + "/listings");
         
-        wait.until(ExpectedConditions.presenceOfElementLocated(By.className("card")));
+        wait.until(ExpectedConditions.presenceOfElementLocated(By.className("listing-link")));
         driver.findElement(By.className("listing-link")).click();
         
         wait.until(ExpectedConditions.presenceOfElementLocated(By.className("edit-btn")));
@@ -174,7 +174,7 @@ public class AirbnbListingTests {
         titleInput.clear();
         titleInput.sendKeys("Updated Test " + System.currentTimeMillis());
         
-        driver.findElement(By.cssSelector("button[type='submit']")).click();
+        driver.findElement(By.className("edit-btn")).click();
         wait.until(ExpectedConditions.urlMatches(".*\\/listings\\/[a-f0-9]+$"));
         
         System.out.println("✓ PASSED: Listing updated");
