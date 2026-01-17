@@ -18,7 +18,7 @@ pipeline {
                     echo 'STAGE 1: Checkout Code from GitHub'
                     echo '=========================================='
                 }
-                git branch: 'main', url: 'https://github.com/HuzefaAbid/Airbnb-clone-ci.git', credentialsId: 'github-pat'
+                git branch: 'main', url: 'https://github.com/Iqrrakhan/jenkins-ci-cd.git', credentialsId: 'github-pat'
             }
         }
 
