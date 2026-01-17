@@ -62,17 +62,36 @@ pipeline {
                     sh """
                         echo "Waiting for application to be ready at http://localhost:${APP_EXTERNAL_PORT}..."
                         
-                        # Retry for 10 times with 3s interval
-                        for i in \$(seq 1 10); do
-                            if curl -f http://localhost:${APP_EXTERNAL_PORT} > /dev/null 2>&1; then
-                                echo "✓ Application is ready!"
-                                exit 0
+                        # Retry for 15 times with 3s interval
+                        for i in \$(seq 1 15); do
+                            echo "Attempt \$i/15..."
+                            
+                            # Check if port is listening
+                            if nc -z localhost ${APP_EXTERNAL_PORT} 2>/dev/null || netstat -tuln | grep :${APP_EXTERNAL_PORT} > /dev/null 2>&1; then
+                                echo "Port ${APP_EXTERNAL_PORT} is listening!"
+                                
+                                # Try to get HTTP response
+                                HTTP_CODE=\$(curl -s -o /dev/null -w "%{http_code}" http://localhost:${APP_EXTERNAL_PORT}/ 2>&1 || echo "000")
+                                echo "HTTP Response Code: \$HTTP_CODE"
+                                
+                                if [ "\$HTTP_CODE" = "200" ] || [ "\$HTTP_CODE" = "301" ] || [ "\$HTTP_CODE" = "302" ]; then
+                                    echo "✓ Application is ready!"
+                                    exit 0
+                                else
+                                    echo "App responding but with code \$HTTP_CODE, trying again..."
+                                fi
+                            else
+                                echo "Port ${APP_EXTERNAL_PORT} not yet available..."
                             fi
-                            echo "Waiting... attempt \$i/10"
+                            
                             sleep 3
                         done
                         
-                        echo "✗ Application failed to start"
+                        echo "✗ Application failed to become ready"
+                        echo "Final diagnostics:"
+                        echo "Port status:"
+                        netstat -tuln | grep ${APP_EXTERNAL_PORT} || echo "Port ${APP_EXTERNAL_PORT} not listening"
+                        echo "Container logs:"
                         docker logs ${APP_NAME}
                         exit 1
                     """
