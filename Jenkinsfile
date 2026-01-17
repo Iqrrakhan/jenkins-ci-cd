@@ -113,6 +113,7 @@ pipeline {
                         sh """
                             # Run tests using Maven with custom Chrome options
                             docker run --rm \
+                                --user root \
                                 --network ${networkName} \
                                 -v \$(pwd):/tests \
                                 -w /tests \
