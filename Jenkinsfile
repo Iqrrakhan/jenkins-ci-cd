@@ -11,6 +11,10 @@ pipeline {
         RECIPIENT_EMAIL = "huzaifaabid41@gmail.com"
     }
 
+    triggers {
+        githubPush()  // Enable GitHub webhook triggers
+    }
+
     stages {
         stage('Checkout') {
             steps {
@@ -59,7 +63,7 @@ pipeline {
                         echo "Waiting for application to be ready at http://localhost:${APP_EXTERNAL_PORT}..."
                         
                         # Retry for 10 times with 3s interval
-                        for i in {1..10}; do
+                        for i in \$(seq 1 10); do
                             if curl -f http://localhost:${APP_EXTERNAL_PORT} > /dev/null 2>&1; then
                                 echo "✓ Application is ready!"
                                 exit 0
