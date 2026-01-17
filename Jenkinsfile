@@ -56,11 +56,11 @@ pipeline {
                     echo 'STAGE 4: Wait for Application to Start'
                     echo '=========================================='
                     sh """
-                        echo "Waiting for application to be ready at http://localhost:$APP_PORT..."
+                        echo "Waiting for application to be ready at http://localhost:${APP_EXTERNAL_PORT}..."
                         
                         # Retry for 10 times with 3s interval
                         for i in {1..10}; do
-                            if curl -f http://localhost:$APP_PORT > /dev/null 2>&1; then
+                            if curl -f http://localhost:${APP_EXTERNAL_PORT} > /dev/null 2>&1; then
                                 echo "✓ Application is ready!"
                                 exit 0
                             fi
@@ -69,7 +69,7 @@ pipeline {
                         done
                         
                         echo "✗ Application failed to start"
-                        docker logs $APP_NAME
+                        docker logs ${APP_NAME}
                         exit 1
                     """
                 }
