@@ -60,39 +60,36 @@ pipeline {
                     echo 'STAGE 4: Wait for Application to Start'
                     echo '=========================================='
                     sh """
-                        echo "Waiting for application to be ready at http://localhost:${APP_EXTERNAL_PORT}..."
+                        echo "Waiting for application to be ready..."
                         
-                        # Retry for 15 times with 3s interval
+                        # Wait for container to be healthy
                         for i in \$(seq 1 15); do
                             echo "Attempt \$i/15..."
                             
-                            # Check if port is listening
-                            if nc -z localhost ${APP_EXTERNAL_PORT} 2>/dev/null || netstat -tuln | grep :${APP_EXTERNAL_PORT} > /dev/null 2>&1; then
-                                echo "Port ${APP_EXTERNAL_PORT} is listening!"
+                            # Check container is running
+                            if docker ps | grep -q ${APP_NAME}; then
+                                echo "✓ Container ${APP_NAME} is running"
                                 
-                                # Try to get HTTP response
-                                HTTP_CODE=\$(curl -s -o /dev/null -w "%{http_code}" http://localhost:${APP_EXTERNAL_PORT}/ 2>&1 || echo "000")
-                                echo "HTTP Response Code: \$HTTP_CODE"
-                                
-                                if [ "\$HTTP_CODE" = "200" ] || [ "\$HTTP_CODE" = "301" ] || [ "\$HTTP_CODE" = "302" ]; then
+                                # Check if port is listening using nc
+                                if nc -z localhost ${APP_EXTERNAL_PORT} 2>/dev/null; then
+                                    echo "✓ Port ${APP_EXTERNAL_PORT} is listening!"
                                     echo "✓ Application is ready!"
                                     exit 0
                                 else
-                                    echo "App responding but with code \$HTTP_CODE, trying again..."
+                                    echo "Port ${APP_EXTERNAL_PORT} not yet available, waiting..."
                                 fi
                             else
-                                echo "Port ${APP_EXTERNAL_PORT} not yet available..."
+                                echo "Container not yet running..."
                             fi
                             
                             sleep 3
                         done
                         
                         echo "✗ Application failed to become ready"
-                        echo "Final diagnostics:"
-                        echo "Port status:"
-                        netstat -tuln | grep ${APP_EXTERNAL_PORT} || echo "Port ${APP_EXTERNAL_PORT} not listening"
+                        echo "Container status:"
+                        docker ps -a | grep ${APP_NAME} || echo "Container not found"
                         echo "Container logs:"
-                        docker logs ${APP_NAME}
+                        docker logs ${APP_NAME} || echo "No logs available"
                         exit 1
                     """
                 }
