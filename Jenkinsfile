@@ -4,7 +4,8 @@ pipeline {
     environment {
         APP_NAME = "nodeapp"
         MONGO_NAME = "mongodb"
-        APP_PORT = "4000"
+        APP_INTERNAL_PORT = "3000"   // Port Node app listens inside container
+        APP_EXTERNAL_PORT = "4000"   // Port mapped outside
         DOCKER_COMPOSE_FILE = "docker-compose.yml"
         DOCKER_TEST_IMAGE = "markhobson/maven-chrome:jdk-11"
         RECIPIENT_EMAIL = "huzaifaabid41@gmail.com"
@@ -14,9 +15,9 @@ pipeline {
         stage('Checkout') {
             steps {
                 script {
-                    echo '=========================================='
+                    echo '========================================'
                     echo 'STAGE 1: Checkout Code from GitHub'
-                    echo '=========================================='
+                    echo '========================================'
                 }
                 git branch: 'main', url: 'https://github.com/Iqrrakhan/jenkins-ci-cd.git', credentialsId: 'github-pat'
             }
@@ -25,9 +26,9 @@ pipeline {
         stage('Stop Existing Containers') {
             steps {
                 script {
-                    echo '=========================================='
+                    echo '========================================'
                     echo 'STAGE 2: Stop Existing Containers'
-                    echo '=========================================='
+                    echo '========================================'
                     sh """
                         docker-compose -f $DOCKER_COMPOSE_FILE down || true
                         docker rm -f $APP_NAME || true
@@ -40,12 +41,10 @@ pipeline {
         stage('Build & Start Containers') {
             steps {
                 script {
-                    echo '=========================================='
+                    echo '========================================'
                     echo 'STAGE 3: Build & Start Application'
-                    echo '=========================================='
-                    sh """
-                        docker-compose -f $DOCKER_COMPOSE_FILE up -d --build
-                    """
+                    echo '========================================'
+                    sh "docker-compose -f $DOCKER_COMPOSE_FILE up -d --build"
                 }
             }
         }
@@ -53,16 +52,19 @@ pipeline {
         stage('Wait for Application') {
             steps {
                 script {
-                    echo '=========================================='
+                    echo '========================================'
                     echo 'STAGE 4: Wait for Application to Start'
-                    echo '=========================================='
+                    echo '========================================'
+                    
+                    // Get Node container IP
+                    def nodeIp = sh(script: "docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $APP_NAME", returnStdout: true).trim()
+                    echo "Node container IP: ${nodeIp}"
+                    
                     sh """
-                        echo "Waiting for application to be ready..."
-                        sleep 15
+                        echo "Waiting for application to be ready at http://${nodeIp}:${APP_INTERNAL_PORT}..."
                         
-                        # Check if app is responding
                         for i in {1..10}; do
-                            if curl -f http://localhost:$APP_PORT > /dev/null 2>&1; then
+                            if curl -f http://${nodeIp}:${APP_INTERNAL_PORT} > /dev/null 2>&1; then
                                 echo "✓ Application is ready!"
                                 exit 0
                             fi
@@ -81,24 +83,22 @@ pipeline {
         stage('Run Selenium Tests') {
             steps {
                 script {
-                    echo '=========================================='
+                    echo '========================================'
                     echo 'STAGE 5: Running Selenium Tests in Docker'
-                    echo '=========================================='
+                    echo '========================================'
+                    
+                    // Get Node container IP dynamically
+                    def nodeIp = sh(script: "docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $APP_NAME", returnStdout: true).trim()
+                    echo "Node container IP for tests: ${nodeIp}"
                     
                     dir('selenium-tests') {
                         sh """
-                            # Get the Docker bridge IP
-                            DOCKER_HOST_IP=\$(ip -4 addr show docker0 | grep -Po 'inet \\K[\\d.]+')
-                            echo "Docker host IP: \$DOCKER_HOST_IP"
-                            
-                            # Run tests
                             docker run --rm \
-                                --network host \
                                 -v \$(pwd):/tests \
                                 -w /tests \
                                 -e MAVEN_OPTS='-Xmx1024m' \
                                 ${DOCKER_TEST_IMAGE} \
-                                mvn clean test -Dapp.url=http://\$DOCKER_HOST_IP:${APP_PORT}
+                                mvn clean test -Dapp.url=http://${nodeIp}:${APP_INTERNAL_PORT}
                         """
                     }
                 }
@@ -114,11 +114,14 @@ pipeline {
         stage('Verify Deployment') {
             steps {
                 script {
-                    echo '=========================================='
+                    echo '========================================'
                     echo 'STAGE 6: Final Deployment Verification'
-                    echo '=========================================='
+                    echo '========================================'
+                    
+                    def nodeIp = sh(script: "docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $APP_NAME", returnStdout: true).trim()
+                    
                     sh """
-                        curl -f http://localhost:$APP_PORT || exit 1
+                        curl -f http://${nodeIp}:${APP_INTERNAL_PORT} || exit 1
                         echo "✓ Application is running and accessible"
                     """
                 }
@@ -129,11 +132,10 @@ pipeline {
     post {
         always {
             script {
-                echo '=========================================='
+                echo '========================================'
                 echo 'Processing Test Results for Email'
-                echo '=========================================='
+                echo '========================================'
                 
-                // Parse test results from XML files
                 def raw = sh(
                     script: "grep -h \"<testcase\" selenium-tests/target/surefire-reports/*.xml || echo ''",
                     returnStdout: true
@@ -179,6 +181,7 @@ BUILD DURATION: ${currentBuild.durationString.replace(' and counting', '')}
 BUILD URL: ${env.BUILD_URL}
 
 ==========================================================================
+
 SELENIUM TEST SUMMARY
 ==========================================================================
 
@@ -190,12 +193,14 @@ Skipped:       ${skipped} ⏭️
 Pass Rate:     ${total > 0 ? String.format("%.1f", (passed * 100.0 / total)) : '0'}%
 
 ==========================================================================
+
 DETAILED TEST RESULTS
 ==========================================================================
 
 ${details ?: 'No test details available'}
 
 ==========================================================================
+
 PIPELINE STAGES
 ==========================================================================
 
@@ -207,6 +212,7 @@ ${failed == 0 ? '✅' : '❌'} Run Selenium Tests
 ✅ Verify Deployment
 
 ==========================================================================
+
 VIEW FULL REPORT
 ==========================================================================
 
@@ -231,24 +237,23 @@ Generated at: ${new Date()}
                 echo "Email sent to: ${RECIPIENT_EMAIL}"
             }
             
-            // Archive test reports
             archiveArtifacts artifacts: '**/selenium-tests/target/surefire-reports/**/*', allowEmptyArchive: true
         }
         
         success {
-            echo '=========================================='
+            echo '========================================'
             echo '✅ PIPELINE SUCCESSFUL!'
             echo 'Application deployed and all tests passed'
             echo 'Email notification sent successfully'
-            echo '=========================================='
+            echo '========================================'
         }
         
         failure {
-            echo '=========================================='
+            echo '========================================'
             echo '❌ PIPELINE FAILED!'
             echo 'Check logs for details'
             echo 'Email notification sent with failure details'
-            echo '=========================================='
+            echo '========================================'
             
             sh """
                 echo "Application Logs:"
