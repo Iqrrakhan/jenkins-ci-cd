@@ -52,19 +52,15 @@ pipeline {
         stage('Wait for Application') {
             steps {
                 script {
-                    echo '========================================'
+                    echo '=========================================='
                     echo 'STAGE 4: Wait for Application to Start'
-                    echo '========================================'
-                    
-                    // Get Node container IP
-                    def nodeIp = sh(script: "docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $APP_NAME", returnStdout: true).trim()
-                    echo "Node container IP: ${nodeIp}"
-                    
+                    echo '=========================================='
                     sh """
-                        echo "Waiting for application to be ready at http://${nodeIp}:${APP_INTERNAL_PORT}..."
+                        echo "Waiting for application to be ready at http://localhost:$APP_PORT..."
                         
+                        # Retry for 10 times with 3s interval
                         for i in {1..10}; do
-                            if curl -f http://${nodeIp}:${APP_INTERNAL_PORT} > /dev/null 2>&1; then
+                            if curl -f http://localhost:$APP_PORT > /dev/null 2>&1; then
                                 echo "✓ Application is ready!"
                                 exit 0
                             fi
@@ -79,6 +75,8 @@ pipeline {
                 }
             }
         }
+
+                 
 
         stage('Run Selenium Tests') {
             steps {
